@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>TheCrims BOT</title>
+    <style>
+      /* Style for the container */
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+      }
+
+      /* Style for the first line */
+      .line1 {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: auto;
+        background-color: lightblue;
+      }
+
+      /* Style for the second line */
+      .line2 {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 500px;
+      }
+
+      /* Style for the left column in the second line */
+      .column1 {
+        display: none;
+        width: 50%;
+        height: 100%;
+        text-align: center;
+        background-color: lightgreen;
+      }
+
+      /* Style for the right column in the second line */
+      .column2 {
+        display: none;
+        width: 50%;
+        height: 100%;
+        text-align: center;
+        background-color: lightpink;
+      }
+
+      #status {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        display: none;
+      }
+
+      #status span {
+        margin-right: 20px;
+      }
+
+      .loading {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="line1">
+        <h1>Request Headers</h1>
+        <textarea id="requestHeaders" rows="15" cols="100"></textarea>
+        <button id="loadingData" style="margin: 10px" onclick="getStatus(true)">
+          Get state
+        </button>
+
+        <img
+          class="loading"
+          src="https://i.gifer.com/ZZ5H.gif"
+          width="20"
+          style="margin-bottom: 10px"
+        />
+
+        <div id="status">
+          <p>Name: <span id="name"></span></p>
+          <p>Respect: <span id="respect"></span></p>
+          <p>Cash: <span id="cash"></span></p>
+          <p>Stamina: <span id="stamina"></span></p>
+          <p>Tickets: <span id="tickets"></span></p>
+        </div>
+      </div>
+      <div class="line2">
+        <div class="column1">
+          <h1>Single ROB</h1>
+          <select id="robberies" style="margin-bottom: 10px"></select>
+          <div>
+            <button id="infinityRob" onclick="startInfinityRob()">
+              Infinity ROB
+            </button>
+            <button id="infinityRob" onclick="stopSingleRob()">STOP ROB</button>
+          </div>
+          <textarea
+            id="logSingleRob"
+            readonly
+            rows="20"
+            cols="100"
+            style="margin: 10px"
+          ></textarea>
+        </div>
+        <div class="column2">
+          <h1>Gang ROB</h1>
+
+          <div style="margin-top: 55px">
+            <button onclick="startInfinityGangRob()">Infinity ROB</button>
+            <button onclick="stopInfinityGangRob()">STOP ROB</button>
+          </div>
+          <textarea
+            id="logGangRob"
+            readonly
+            rows="20"
+            cols="100"
+            style="margin: 10px"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
+<script>
+  let headersObject = {};
+  let USER = {};
+  let infinitySingleRob = null;
+  let infinityGangRob = null;
+  clearLogs();
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function loadingHeaders() {
+    const requestHeadersTextarea = document.querySelector("#requestHeaders");
+    const requestHeaders = requestHeadersTextarea.value;
+    const headersArray = requestHeaders.trim().split("\n");
+
+    const availableKeys = [
+      "User-Agent",
+      "Accept",
+      "Accept-Language",
+      "x-request",
+      "Connection",
+      "Referer",
+      "Cookie",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Site",
+      "Pragma",
+      "Cache-Control",
+      "TE",
+    ];
+
+    headersArray.forEach((header) => {
+      const [key, value] = header.split(":");
+      if (key && value && availableKeys.includes(key))
+        headersObject[key.trim()] = value.trim();
+    });
+
+    headersObject["Referer"] = "https://www.thecrims.com/alley";
+    headersObject["Content-Type"] = "application/json";
+  }
+
+  function getTimestamp() {
+    return new Date().getTime();
+  }
+
+  function loadInfo() {
+    const status = document.querySelector("#status");
+    const column1 = document.querySelector(".column1");
+    const column2 = document.querySelector(".column2");
+    const loading = document.querySelector(".loading");
+
+    const name = document.querySelector("#name");
+    const respect = document.querySelector("#respect");
+    const cash = document.querySelector("#cash");
+    const tickets = document.querySelector("#tickets");
+    const stamina = document.querySelector("#stamina");
+
+    name.innerHTML = USER.username;
+    respect.innerHTML = USER.respect;
+    cash.innerHTML = USER.cash;
+    tickets.innerHTML = USER.tickets;
+    stamina.innerHTML = USER.stamina;
+
+    status.style.display = "flex";
+
+    if (USER.username) column1.style.display = "block";
+    else column1.style.display = "none";
+
+    if (USER.gang) column2.style.display = "block";
+    else column2.style.display = "none";
+
+    loading.style.display = "none";
+  }
+
+  async function proxy(url, method, body) {
+    const response = await fetch("http://localhost:3000/proxy", {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "post",
+      body: JSON.stringify({
+        url,
+        method,
+        headers: headersObject,
+        body: JSON.stringify(body),
+      }),
+    });
+    return await response.json();
+  }
+
+  async function getStatus(loadHeaders = false) {
+    if (loadHeaders) {
+      const loading = document.querySelector(".loading");
+      loading.style.display = "block";
+      loadingHeaders();
+      await getRobberies();
+    }
+
+    const url = "https://www.thecrims.com/api/v1/state";
+    const method = "get";
+    const body = {};
+
+    const { user } = await proxy(url, method);
+
+    USER = user;
+
+    loadInfo();
+  }
+
+  async function rob(id) {
+    const url = "https://www.thecrims.com/api/v1/rob";
+    const method = "post";
+    const body = {
+      id,
+      full: true,
+      tickets: null,
+      items: [],
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    await proxy(url, method, body);
+  }
+
+  async function getNightclub() {
+    const url = "https://www.thecrims.com/api/v1/nightclubs";
+    const method = "get";
+    const { nightclubs } = await proxy(url, method);
+
+    const id = nightclubs[nightclubs.length - 1]["id"];
+    return id;
+  }
+
+  async function getRobberies() {
+    const url = "https://www.thecrims.com/api/v1/robberies";
+    const method = "get";
+    const { single_robberies } = await proxy(url, method);
+
+    const robberiesSelect = document.querySelector("#robberies");
+    single_robberies.forEach((robbery) => {
+      const option = document.createElement("option");
+      option.value = robbery.id;
+      option.text = `${robbery.translated_name} - ${robbery.energy}% SP: ${robbery.successprobability}%`;
+      robberiesSelect.appendChild(option);
+    });
+  }
+
+  async function detox() {
+    if (USER.addiction < 85) return;
+    log("Detox");
+
+    const url = "https://www.thecrims.com/api/v1/hospital/detox";
+    await proxy(url, "POST");
+  }
+
+  async function entryNightclub(nightclubId) {
+    const url = "https://www.thecrims.com/api/v1/nightclub";
+    const method = "POST";
+    const body = {
+      id: nightclubId,
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    const data = await proxy(url, method, body);
+
+    const nightclub = data.nightclub;
+
+    if (nightclub === null) {
+      if (data.messages[0][0].includes("same nightclub")) {
+        await sleep(5000);
+        return entryNightclub(nightclubId);
+      } else {
+        throw new Error(data.messages[0][0]);
+      }
+    }
+
+    const products = nightclub.products;
+    const { drugs, hookers } = products;
+
+    let result = {};
+    if (drugs.length > 0) {
+      result = {
+        product: "drug",
+        id: drugs[0].id,
+      };
+    } else if (hookers.length > 0) {
+      result = {
+        product: "hooker",
+        id: hookers[0].id,
+      };
+    } else {
+      throw new Error("No product found");
+    }
+
+    return result;
+  }
+
+  async function buyDrug(id) {
+    const url = "https://www.thecrims.com/api/v1/nightclub/drug";
+    const body = {
+      id,
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    await proxy(url, "POST", body);
+  }
+
+  async function buyHooker(id) {
+    const url = "https://www.thecrims.com/api/v1/nightclub/hooker";
+    const body = {
+      id,
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    await proxy(url, "POST", body);
+  }
+
+  async function exitNightclub(nightclubId) {
+    const url = "https://www.thecrims.com/api/v1/nightclub/exit";
+    const body = {
+      reason: "Manual exit",
+      exit_key: nightclubId,
+      e_at: null,
+      bw: "50.45px",
+      bh: "30px",
+      bfs: "14px",
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+    await proxy(url, "POST", body);
+    log("Exited nightclub");
+  }
+
+  async function rechargeStamina() {
+    if (USER.stamina > 50) return;
+
+    const nightclubId = await getNightclub();
+
+    const { product, id } = await entryNightclub(nightclubId);
+
+    log(`Entered nightclub`);
+
+    if (product === "drug") await buyDrug(id);
+    else if (product == "hooker") await buyHooker(id);
+
+    log(`Bought ${product}`);
+
+    await exitNightclub(nightclubId);
+  }
+
+  async function acceptGangRob() {
+    const url = "https://www.thecrims.com/api/v1/gangrobbery/accept";
+    const body = {
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    await proxy(url, "POST", body);
+
+    log("Accepted gang robbery");
+  }
+
+  async function executeGangRob() {
+    const url = "https://www.thecrims.com/api/v1/gangrobbery/execute";
+    const body = {
+      input_counters: {},
+      action_timestamp: getTimestamp(),
+    };
+
+    await proxy(url, "POST", body);
+
+    log("Executed gang robbery");
+  }
+
+  async function startInfinityRob() {
+    infinitySingleRob = true;
+    clearLogs();
+
+    let initRespect = USER.respect;
+    let initCash = USER.cash;
+
+    const robberiesSelect = document.querySelector("#robberies");
+    const robId = robberiesSelect.value;
+    log("...::: Starting :::...");
+
+    detox();
+
+    await rechargeStamina();
+
+    for (let index = 1; infinitySingleRob; index++) {
+      try {
+        await rob(Number(robId));
+        await getStatus();
+        const currentRespect = USER.respect;
+        const currentCash = USER.cash;
+
+        log(
+          `#${index} - Respect: +${currentRespect - initRespect} | Cash: +${
+            currentCash - initCash
+          }`
+        );
+
+        initRespect = currentRespect;
+        initCash = currentCash;
+
+        await rechargeStamina();
+
+        detox();
+
+        await sleep(1000);
+      } catch (error) {
+        console.log(error);
+        log("Error");
+        break;
+      }
+    }
+  }
+
+  async function startInfinityGangRob() {
+    infinityGangRob = true;
+    clearLogs();
+
+    let initRespect = USER.respect;
+    let initCash = USER.cash;
+
+    log("...::: Starting :::...");
+
+    detox();
+
+    await rechargeStamina();
+
+    for (let index = 1; infinityGangRob; index++) {
+      try {
+        await acceptGangRob();
+        log("Awaiting...");
+        await sleep(4000);
+        await executeGangRob();
+
+        await getStatus();
+        const currentRespect = USER.respect;
+        const currentCash = USER.cash;
+
+        log(
+          `#${index} - Respect: +${currentRespect - initRespect} | Cash: +${
+            currentCash - initCash
+          }`
+        );
+
+        initRespect = currentRespect;
+        initCash = currentCash;
+
+        if (USER.stamina < 25) await rechargeStamina();
+        detox();
+      } catch (error) {
+        console.log(error);
+        log("Error");
+        break;
+      }
+    }
+  }
+
+  function stopSingleRob() {
+    log("...::: STOPING :::...");
+    infinitySingleRob = false;
+  }
+
+  function stopInfinityGangRob() {
+    log("...::: STOPING :::...");
+    infinityGangRob = false;
+  }
+
+  function log(message) {
+    const textarea = document.querySelector(
+      infinitySingleRob ? "#logSingleRob" : infinityGangRob ? "#logGangRob" : ""
+    );
+    if (textarea) {
+      textarea.value += `${message}\n`;
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }
+
+  function clearLogs() {
+    const textarea = document.querySelector("#logSingleRob");
+    textarea.value = "";
+    const textarea2 = document.querySelector("#logGangRob");
+    textarea2.value = "";
+  }
+</script>
